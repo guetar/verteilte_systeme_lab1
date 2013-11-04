@@ -21,7 +21,6 @@ import message.response.MessageResponse;
 public class ProxyCli extends Proxy implements IProxyCli {
 	
 	private static final Logger log = Logger.getLogger(ProxyCli.class);
-	
 	private Thread shellThread;
 	
 	private ServerSocket sSocket;
@@ -42,69 +41,65 @@ public class ProxyCli extends Proxy implements IProxyCli {
 	}
 
 	public ProxyCli(Config config, Shell shell) throws IOException {
-		
+
 		super(config, shell);
 		shell.register(this);
 		
 		shellThread = new Thread(shell);
 		shellThread.start();
 		
-		new Thread(new Runnable() {
-
+//		new Thread(new Runnable() {
+//
+//			@Override
+//			public void run() {
+//				try {
+//					sSocket = new ServerSocket(tcpPort);
+//					sClientSocket = sSocket.accept();
+//					PrintWriter out = new PrintWriter(sClientSocket.getOutputStream(), true);
+//					BufferedReader in = new BufferedReader(new InputStreamReader(sClientSocket.getInputStream()));
+//					log.info("Socket established ...");
+//					
+//					String inputLine;
+//					while ((inputLine = in.readLine()) != null) {
+//				        out.println(inputLine);
+//				    }
+//				
+//				} catch(IOException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//				}
+//			}
+//		}).start();
+		
+		sThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
-				try {
-					sSocket = new ServerSocket(tcpPort);
-					sClientSocket = sSocket.accept();
-					PrintWriter out = new PrintWriter(sClientSocket.getOutputStream(), true);
-					BufferedReader in = new BufferedReader(new InputStreamReader(sClientSocket.getInputStream()));
-					log.info("Socket established ...");
-					
-					String inputLine;
-					while ((inputLine = in.readLine()) != null) {
-				        out.println(inputLine);
-				    }
-				
-				} catch(IOException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
+				while(true) {
+					try {
+						pool.submit(new TCPHandler(sSocket.accept()));
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
 				}
 			}
-		}).start();
+		});
 		
-		
-//		sThread = new Thread(new Runnable() {
-//			@Override
-//			public void run() {
-//				while(true) {
-//					try {
-//						sClientSocket = sSocket.accept();
-//					} catch (IOException e) {
-//						// TODO Auto-generated catch block
-//						e.printStackTrace();
-//					}
-//				}
-//			}
-//		});
-//		
-//		dThread = new Thread(new Runnable() {
-//			@Override
-//			public void run() {
-//				while(true) {
-//					try {
-//						byte[] buffer = new byte[10];
-//						DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-//						dSocket.receive(packet);
-//					} catch (IOException e) {
-//						// TODO Auto-generated catch block
-//						e.printStackTrace();
-//					}
-//				}
-//			}
-//		});
-		
-//		PrintWriter out = new PrintWriter(sClientSocket.getOutputStream(), true);
-//		BufferedReader in = new BufferedReader(new InputStreamReader(sClientSocket.getInputStream()));
+		dThread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				while(true) {
+					try {
+						byte[] buffer = new byte[10];
+						DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+						dSocket.receive(packet);
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		});
 		
 		log.info("Proxy started ...");
 	}
