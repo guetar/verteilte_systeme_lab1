@@ -1,9 +1,11 @@
 package proxy;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -12,22 +14,30 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
 
+import util.ChecksumUtils;
 import cli.Command;
 import message.Request;
 import message.Response;
 import message.request.BuyRequest;
 import message.request.CreditsRequest;
+import message.request.DownloadFileRequest;
 import message.request.DownloadTicketRequest;
 import message.request.InfoRequest;
 import message.request.ListRequest;
 import message.request.LoginRequest;
 import message.request.UploadRequest;
+import message.request.VersionRequest;
 import message.response.BuyResponse;
 import message.response.CreditsResponse;
+import message.response.DownloadFileResponse;
+import message.response.DownloadTicketResponse;
+import message.response.InfoResponse;
 import message.response.ListResponse;
 import message.response.LoginResponse;
 import message.response.LoginResponse.Type;
 import message.response.MessageResponse;
+import message.response.VersionResponse;
+import model.DownloadTicket;
 import model.FileServerInfo;
 
 public class TCPProxy extends Thread implements IProxy {
@@ -48,35 +58,36 @@ public class TCPProxy extends Thread implements IProxy {
 	@Override
 	public void run() {
 		try {
-			in = new ObjectInputStream(socket.getInputStream());
 			out = new ObjectOutputStream(socket.getOutputStream());
-
-		} catch(IOException e) {
+			in = new ObjectInputStream(socket.getInputStream());
+		
+			while(true) {
+				try {
+					Request request = (Request) in.readObject();
+					
+					if(request instanceof LoginRequest) {
+						out.writeObject(login((LoginRequest) request));
+					} else if(request instanceof CreditsRequest) {
+						out.writeObject(credits());
+					} else if(request instanceof BuyRequest) {
+						out.writeObject(buy((BuyRequest) request));
+					} else if(request instanceof ListRequest) {
+						out.writeObject(list());
+					} else if(request instanceof DownloadTicketRequest) {
+						out.writeObject(download((DownloadTicketRequest) request));
+					} else if(request instanceof UploadRequest) {
+						out.writeObject(upload((UploadRequest) request));
+					}
+					
+				} catch(SocketException | EOFException e) {
+					interrupt();
+					break;
+				}
+			}
+			
+		} catch(ClassNotFoundException | IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-		}
-		while(true) {
-			try {
-				Request request = (Request) in.readObject();
-				
-				if(request instanceof LoginRequest) {
-					out.writeObject(login((LoginRequest) request));
-				} else if(request instanceof CreditsRequest) {
-					out.writeObject(credits());
-				} else if(request instanceof BuyRequest) {
-					out.writeObject(buy((BuyRequest) request));
-				} else if(request instanceof ListRequest) {
-					out.writeObject(list());
-				} else if(request instanceof DownloadTicketRequest) {
-					out.writeObject(download((DownloadTicketRequest) request));
-				} else if(request instanceof UploadRequest) {
-					out.writeObject(upload((UploadRequest) request));
-				}
-				
-			} catch(ClassNotFoundException | IOException e) {
-				// TODO Auto-generated catch block
-				break;
-			}
 		}
 	}
 
@@ -88,7 +99,7 @@ public class TCPProxy extends Thread implements IProxy {
             socket.close();
             
         } catch (IOException e) {
-            log.error("IOException occurred during shutdown");
+            log.error("IOException occurred during shutdown ...");
         }
     }
     
@@ -139,19 +150,18 @@ public class TCPProxy extends Thread implements IProxy {
 	@Command
 	@Override
 	public Response list() throws IOException {
-		log.info("proxy");
 		List<FileServerInfo> servers = ProxyCli.listFileservers();
 		Set<String> files = new HashSet<String>();
 		
 		for(FileServerInfo fs : servers) {
-			log.info("blah");
 			try {
 				Socket socket = new Socket(fs.getAddress(), fs.getPort());
 				ObjectInputStream i = new ObjectInputStream(socket.getInputStream());
 				ObjectOutputStream o = new ObjectOutputStream(socket.getOutputStream());
+				
 	            o.writeObject(new ListRequest());
-	            
 	            ListResponse response = (ListResponse) i.readObject();
+	            
 	            for(String filename : response.getFileNames()) {
 		            files.add(filename);
 	            }
@@ -168,7 +178,35 @@ public class TCPProxy extends Thread implements IProxy {
 	@Command
 	@Override
 	public Response download(DownloadTicketRequest request) throws IOException {
-		// TODO Auto-generated method stub
+		List<FileServerInfo> servers = ProxyCli.listFileservers();
+		
+		for(FileServerInfo fs : servers) {
+			try {
+				Socket socket = new Socket(fs.getAddress(), fs.getPort());
+				ObjectInputStream i = new ObjectInputStream(socket.getInputStream());
+				ObjectOutputStream o = new ObjectOutputStream(socket.getOutputStream());
+				
+				o.writeObject(new InfoRequest(request.getFilename()));
+				InfoResponse info = (InfoResponse) i.readObject();
+				
+				o.writeObject(new VersionRequest(request.getFilename()));
+				VersionResponse version = (VersionResponse) i.readObject();
+				
+				String checksum = ChecksumUtils.generateChecksum(username, info.getFilename(), version.getVersion(), info.getSize());
+				DownloadTicket ticket = new DownloadTicket(username, info.getFilename(), checksum, fs.getAddress(), fs.getPort());
+				
+				o.writeObject(new DownloadFileRequest(ticket));
+	            DownloadFileResponse fileResponse = (DownloadFileResponse) i.readObject();
+	            
+	            socket.shutdownOutput();
+	            socket.close();
+	            
+	            return fileResponse;
+	            
+	        } catch (ClassNotFoundException e) {
+	            log.error("ClassNotFoundException in ClientCli.login()");
+	        }
+		}
 		return null;
 	}
 

@@ -8,11 +8,13 @@ import java.net.Socket;
 import message.Response;
 import message.request.BuyRequest;
 import message.request.CreditsRequest;
+import message.request.DownloadTicketRequest;
 import message.request.ListRequest;
 import message.request.LoginRequest;
 import message.request.LogoutRequest;
 import message.response.BuyResponse;
 import message.response.CreditsResponse;
+import message.response.DownloadFileResponse;
 import message.response.ListResponse;
 import message.response.LoginResponse;
 import message.response.LoginResponse.Type;
@@ -160,7 +162,18 @@ public class ClientCli implements IClientCli {
 	@Command
 	@Override
 	public Response download(String filename) throws IOException {
-		// TODO Auto-generated method stub
+		if (!loggedIn) {
+            log.info("User is not logged in.");
+            return null;
+        }
+		
+		try {
+			out.writeObject(new DownloadTicketRequest(filename));
+			return (DownloadFileResponse) in.readObject();
+			
+		} catch(ClassNotFoundException e) {
+            log.error("ClassNotFoundException in ClientCli.list()");
+		}
 		return null;
 	}
 

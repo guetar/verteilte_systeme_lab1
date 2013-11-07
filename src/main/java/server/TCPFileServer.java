@@ -1,10 +1,13 @@
 package server;
 
+import java.io.EOFException;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -13,6 +16,7 @@ import org.apache.log4j.Logger;
 
 import cli.Command;
 import proxy.TCPProxy;
+import util.ChecksumUtils;
 import message.Request;
 import message.Response;
 import message.request.BuyRequest;
@@ -24,8 +28,12 @@ import message.request.ListRequest;
 import message.request.LoginRequest;
 import message.request.UploadRequest;
 import message.request.VersionRequest;
+import message.response.DownloadFileResponse;
+import message.response.InfoResponse;
 import message.response.ListResponse;
 import message.response.MessageResponse;
+import message.response.VersionResponse;
+import model.DownloadTicket;
 
 public class TCPFileServer extends Thread implements IFileServer {
 
@@ -38,7 +46,6 @@ public class TCPFileServer extends Thread implements IFileServer {
 	private String fsDir;
 
 	public TCPFileServer(Socket socket, String fsDir) {
-		log.info("new fileserver");
 		this.socket = socket;
 		this.fsDir = fsDir;
 	}
@@ -46,25 +53,31 @@ public class TCPFileServer extends Thread implements IFileServer {
 	@Override
 	public void run() {
 		try {
-			in = new ObjectInputStream(socket.getInputStream());
 			out = new ObjectOutputStream(socket.getOutputStream());
+			in = new ObjectInputStream(socket.getInputStream());
 			
 			while(true) {
-				Request request = (Request) in.readObject();
-				
-				if(request instanceof ListRequest) {
-					out.writeObject(list());
-				} else if(request instanceof InfoRequest) {
-					out.writeObject(info((InfoRequest) request));
-				} else if(request instanceof DownloadFileRequest) {
-					out.writeObject(download((DownloadFileRequest) request));
-				} else if(request instanceof VersionRequest) {
-					out.writeObject(version((VersionRequest) request));
-				} else if(request instanceof UploadRequest) {
-					out.writeObject(upload((UploadRequest) request));
+				try {
+					Request request = (Request) in.readObject();
+					
+					if(request instanceof ListRequest) {
+						out.writeObject(list());
+					} else if(request instanceof DownloadFileRequest) {
+						out.writeObject(download((DownloadFileRequest) request));
+					} else if(request instanceof InfoRequest) {
+						out.writeObject(info((InfoRequest) request));
+					} else if(request instanceof VersionRequest) {
+						out.writeObject(version((VersionRequest) request));
+					} else if(request instanceof UploadRequest) {
+						out.writeObject(upload((UploadRequest) request));
+					}
+					
+				} catch(SocketException | EOFException e) {
+					interrupt();
+					break;
 				}
 			}
-			
+
 		} catch(ClassNotFoundException  | IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -79,7 +92,7 @@ public class TCPFileServer extends Thread implements IFileServer {
             socket.close();
             
         } catch (IOException e) {
-            log.error("IOException occurred during shutdown");
+            log.error("IOException occurred during shutdown ...");
         }
     }
     
@@ -90,8 +103,7 @@ public class TCPFileServer extends Thread implements IFileServer {
 	@Command
 	@Override
 	public Response list() throws IOException {
-		log.info("fileserver");
-		File folder = new File("file:" + fsDir);
+		File folder = new File(fsDir);
 		Set<String> files = new HashSet<String>();
 		
 		for (File f : folder.listFiles()) {
@@ -105,22 +117,39 @@ public class TCPFileServer extends Thread implements IFileServer {
 	@Command
 	@Override
 	public Response download(DownloadFileRequest request) throws IOException {
-		// TODO Auto-generated method stub
+		DownloadTicket ticket = request.getTicket();
+		
+		InfoResponse info = (InfoResponse) info(new InfoRequest(ticket.getFilename()));
+		VersionResponse version = (VersionResponse) version(new VersionRequest(ticket.getFilename()));
+		String checksum = ChecksumUtils.generateChecksum(ticket.getUsername(), ticket.getFilename(), version.getVersion(), info.getSize());
+		
+		if(checksum.equals(ticket.getChecksum())) {
+			File file = new File(fsDir + "/" + ticket.getFilename());
+			byte[] fileBytes = new byte[(int) file.length()];
+			
+			FileInputStream fileInputStream = new FileInputStream(file);
+		    fileInputStream.read(fileBytes);
+		    fileInputStream.close();
+		    
+			return new DownloadFileResponse(ticket, fileBytes);
+		} else {
+			log.info("Checksums do not match: " + ticket.getChecksum() + " | " + checksum);
+		}
 		return null;
 	}
 
 	@Command
 	@Override
 	public Response info(InfoRequest request) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		File file = new File(fsDir + "/" + request.getFilename());
+		return new InfoResponse(request.getFilename(), file.length());
 	}
 
 	@Command
 	@Override
 	public Response version(VersionRequest request) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		// TODO fully implement
+		return new VersionResponse(request.getFilename(), 1);
 	}
 
 	@Command

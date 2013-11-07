@@ -5,6 +5,7 @@
 client:	!login alice 12345
 client:	!credits
 client: !list
+client: !download short.txt
 
 proxy:	!users
 proxy:  !fileservers
