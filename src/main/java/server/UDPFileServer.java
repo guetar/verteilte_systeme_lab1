@@ -14,18 +14,22 @@ import org.apache.log4j.Logger;
 public class UDPFileServer extends Thread {
 	private static final Logger log = Logger.getLogger(UDPFileServer.class);
 	
-	private ConcurrentHashMap<String, UDPFileServer> sessions;
 	private DatagramSocket udpSocket;
-	private String fsHost;
 	private int udpPort;
+	private int tcpPort;
+	private String fsHost;
 	private int fsAlive;
+	private boolean stopped;
 
-	public UDPFileServer(String fsHost, int udpPort, int fsAlive) {
+
+	public UDPFileServer(String fsHost, int udpPort, int tcpPort, int fsAlive) {
 		try {
 			this.udpSocket = new DatagramSocket();
-			this.fsHost = fsHost;
 			this.udpPort = udpPort;
+			this.tcpPort = tcpPort;
+			this.fsHost = fsHost;
 			this.fsAlive = fsAlive;
+			this.stopped = false;
 			
 		} catch (SocketException e) {
 			// TODO Auto-generated catch block
@@ -35,28 +39,34 @@ public class UDPFileServer extends Thread {
 	
 	@Override
     public void run() {
-        try {
-        	InetAddress IPAddress = InetAddress.getByName(fsHost);
-        	String message = "isAlive" + udpPort;
-        	byte[] buffer = new byte[12];
-        	buffer = message.getBytes();
-            DatagramPacket packet = new DatagramPacket(buffer, buffer.length, IPAddress, udpPort);
-            
-            while(true) {
-                udpSocket.send(packet);
-                log.info("sent: " + new String(packet.getData()));
-                Thread.sleep(fsAlive);
-            }
-
-        } catch (InterruptedException | IOException e) {
+    	try {
+			InetAddress IPAddress = InetAddress.getByName(fsHost);
+	    	String message = "isAlive" + tcpPort;
+	    	byte[] buffer = new byte[12];
+	    	buffer = message.getBytes();
+	        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, IPAddress, udpPort);
+	        
+	        while(!stopped) {
+	            try {
+	                udpSocket.send(packet);
+	                Thread.sleep(fsAlive);
+	
+	            } catch (InterruptedException e) {
+	    			// TODO Auto-generated catch block
+	            	break;
+	            }
+	        }
+	        
+    	} catch(IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-        }
+    	}
     }
 	
 	@Override
     public void interrupt() {
         super.interrupt();
+        stopped = true;
         udpSocket.close();
     }
 }

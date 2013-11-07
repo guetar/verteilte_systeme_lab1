@@ -6,10 +6,14 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 
 import message.Response;
+import message.request.BuyRequest;
 import message.request.CreditsRequest;
+import message.request.ListRequest;
 import message.request.LoginRequest;
 import message.request.LogoutRequest;
+import message.response.BuyResponse;
 import message.response.CreditsResponse;
+import message.response.ListResponse;
 import message.response.LoginResponse;
 import message.response.LoginResponse.Type;
 import message.response.MessageResponse;
@@ -35,7 +39,6 @@ public class ClientCli implements IClientCli {
 	private ObjectOutputStream out;
 	private ObjectInputStream in;
 	private Socket socket;
-	private Thread clientThread;
 
 	public static void main(String[] args) throws Exception {
 		
@@ -66,13 +69,13 @@ public class ClientCli implements IClientCli {
 		shellThread = new Thread(shell);
 		shellThread.start();
 		
-//		try {
-//			socket = new Socket(host, port);
-//			
-//		} catch (IOException e) {
-//			// TODO Auto-generated catch block
-//			e.printStackTrace();
-//		}
+		try {
+			socket = new Socket(host, port);
+			
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		log.info("Client started ...");
 	}
 	
@@ -85,7 +88,6 @@ public class ClientCli implements IClientCli {
         }
         
         try {
-            socket = new Socket(host, port);
             out = new ObjectOutputStream(socket.getOutputStream());
             in = new ObjectInputStream(socket.getInputStream());
             out.writeObject(new LoginRequest(username, password));
@@ -122,14 +124,36 @@ public class ClientCli implements IClientCli {
 	@Command
 	@Override
 	public Response buy(long credits) throws IOException {
-		// TODO Auto-generated method stub
+		if (!loggedIn) {
+            log.info("User is not logged in.");
+            return null;
+        }
+		
+		try {
+			out.writeObject(new BuyRequest(credits));
+			return (BuyResponse) in.readObject();
+			
+		} catch(ClassNotFoundException e) {
+            log.error("ClassNotFoundException in ClientCli.buy()");
+		}
 		return null;
 	}
 
 	@Command
 	@Override
 	public Response list() throws IOException {
-		// TODO Auto-generated method stub
+		if (!loggedIn) {
+            log.info("User is not logged in.");
+            return null;
+        }
+		
+		try {
+			out.writeObject(new ListRequest());
+			return (ListResponse) in.readObject();
+			
+		} catch(ClassNotFoundException e) {
+            log.error("ClassNotFoundException in ClientCli.list()");
+		}
 		return null;
 	}
 

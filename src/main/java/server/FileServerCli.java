@@ -63,7 +63,7 @@ public class FileServerCli implements IFileServerCli {
 			e.printStackTrace();
 		}
 		
-		udpFileServer = new UDPFileServer(fsHost, udpPort, fsAlive);
+		udpFileServer = new UDPFileServer(fsHost, udpPort, tcpPort, fsAlive);
 		udpFileServer.start();
 		
         try {
@@ -79,19 +79,23 @@ public class FileServerCli implements IFileServerCli {
 			public void run() {
 				while(true) {
 					try {
-						pool.submit(new TCPFileServer(tcpSocket.accept()));
+						pool.submit(new TCPFileServer(tcpSocket.accept(), fsDir));
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
-						e.printStackTrace();
+						break;
 					}
 				}
 			}
 		});
+		proxyThread.start();
+		
+		log.info("Fileserver started ...");
 	}
 
 	@Command
 	@Override
 	public MessageResponse exit() throws IOException {
+		proxyThread.interrupt();
 		tcpSocket.close();
 		pool.shutdown();
 		return new MessageResponse("exit");

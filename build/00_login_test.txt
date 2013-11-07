@@ -4,6 +4,8 @@
 
 client:	!login alice 12345
 client:	!credits
+client: !list
+
 proxy:	!users
 proxy:  !fileservers
 

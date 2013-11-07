@@ -1,9 +1,12 @@
 package server;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
@@ -21,6 +24,7 @@ import message.request.ListRequest;
 import message.request.LoginRequest;
 import message.request.UploadRequest;
 import message.request.VersionRequest;
+import message.response.ListResponse;
 import message.response.MessageResponse;
 
 public class TCPFileServer extends Thread implements IFileServer {
@@ -31,9 +35,12 @@ public class TCPFileServer extends Thread implements IFileServer {
 	private Socket socket;
 	private ObjectInputStream in;
 	private ObjectOutputStream out;
+	private String fsDir;
 
-	public TCPFileServer(Socket socket) {
+	public TCPFileServer(Socket socket, String fsDir) {
+		log.info("new fileserver");
 		this.socket = socket;
+		this.fsDir = fsDir;
 	}
 	
 	@Override
@@ -83,8 +90,16 @@ public class TCPFileServer extends Thread implements IFileServer {
 	@Command
 	@Override
 	public Response list() throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		log.info("fileserver");
+		File folder = new File("file:" + fsDir);
+		Set<String> files = new HashSet<String>();
+		
+		for (File f : folder.listFiles()) {
+			if (f.isFile()) {
+				files.add(f.getName());
+			}
+		}
+		return new ListResponse(files);
 	}
 
 	@Command

@@ -1,16 +1,10 @@
 package proxy;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.ServerSocket;
-import java.net.Socket;
-import java.util.Collections;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.Set;
@@ -19,12 +13,6 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import org.apache.log4j.Logger;
-
-import util.ComponentFactory;
-import util.Config;
-import cli.Command;
-import cli.Shell;
 import message.Response;
 import message.response.FileServerInfoResponse;
 import message.response.MessageResponse;
@@ -32,13 +20,21 @@ import message.response.UserInfoResponse;
 import model.FileServerInfo;
 import model.User;
 
+import org.apache.log4j.Logger;
+
+import util.ComponentFactory;
+import util.Config;
+import cli.Command;
+import cli.Shell;
+
 public class ProxyCli implements IProxyCli {
 	
 	private static final Logger log = Logger.getLogger(ProxyCli.class);
+	
     private static ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-    
-    private static ConcurrentHashMap<String, String> pws;
-    private static ConcurrentHashMap<String, User> users;
+	private static ConcurrentHashMap<InetAddress, FileServerInfo> servers = new ConcurrentHashMap<InetAddress, FileServerInfo>();
+    private static ConcurrentHashMap<String, String> pws = new ConcurrentHashMap<String, String>();;
+    private static ConcurrentHashMap<String, User> users = new ConcurrentHashMap<String, User>();
 	
     private Config configProxy;
     private Config configUser;
@@ -88,9 +84,6 @@ public class ProxyCli implements IProxyCli {
         Set<String> unsernames = bundle.keySet();
         this.configUser = new Config("user");
 
-		users = new ConcurrentHashMap<String, User>();
-		pws = new ConcurrentHashMap<String, String>();
-
         for (String username : unsernames) {
             username = username.substring(0, username.indexOf('.'));
             
@@ -121,11 +114,12 @@ public class ProxyCli implements IProxyCli {
 						pool.submit(new TCPProxy(tcpSocket.accept()));
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
-						e.printStackTrace();
+						break;
 					}
 				}
 			}
 		});
+		clientThread.start();
 		
 		log.info("Proxy started ...");
 	}
@@ -135,14 +129,12 @@ public class ProxyCli implements IProxyCli {
 	}
 	
 	public static synchronized void login(String username) {
-		User user = users.get(username);
-        users.remove(user.getName());
+		User user = users.remove(username);
         users.put(user.getName(), new User(user.getName(), user.getCredits(), true));
 	}
 	
 	public static synchronized void logout(String username) {
-		User user = users.get(username);
-        users.remove(user.getName());
+		User user = users.remove(username);
         users.put(user.getName(), new User(user.getName(), user.getCredits(), false));
 	}
 	
@@ -150,12 +142,29 @@ public class ProxyCli implements IProxyCli {
 		return users.get(username).getCredits();
 	}
 	
+	public static synchronized long buy(String username, long credits) {
+		User user = users.remove(username);
+		long newCredits = user.getCredits() + credits;
+		users.put(user.getName(), new User(user.getName(), newCredits, user.isOnline()));
+		return newCredits;
+	}
+	
+	public static synchronized void addServer(FileServerInfo info) {
+		servers.put(info.getAddress(), info);
+	}
+
+	public static synchronized void removeServer(FileServerInfo info) {
+		servers.remove(info.getAddress());
+	}
+	
+	public static synchronized List<FileServerInfo> listFileservers() {
+		return new ArrayList<FileServerInfo>(servers.values());
+	}
+	
 	@Command
 	@Override
 	public Response fileservers() throws IOException {
-		log.info("Listing fileservers ...");
-		List<FileServerInfo> servers = new ArrayList<FileServerInfo>(udpProxy.getServers().values());
-        return new FileServerInfoResponse(servers);
+        return new FileServerInfoResponse(new ArrayList<FileServerInfo>(servers.values()));
 	}
 
 	@Command
@@ -180,8 +189,9 @@ public class ProxyCli implements IProxyCli {
         shell.close();
         System.in.close();
         
-        tcpSocket.close();
+        clientThread.interrupt();
         udpProxy.interrupt();
+        tcpSocket.close();
         pool.shutdown();
 
         return new MessageResponse("exit");
