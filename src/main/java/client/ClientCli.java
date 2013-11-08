@@ -1,11 +1,13 @@
 package client;
 
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 
 import message.Response;
@@ -231,6 +233,8 @@ public class ClientCli implements IClientCli {
             loggedIn = false;
             return response;
             
+        } catch (EOFException e) {
+        	
         } catch (ClassNotFoundException e) {
             log.error("ClassNotFoundException in ClientCli.logout()");
         }

@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.log4j.Logger;
 
 import cli.Command;
-import proxy.TCPProxy;
+import proxy.Proxy;
 import util.ChecksumUtils;
 import message.Request;
 import message.Response;
@@ -39,16 +39,16 @@ import message.response.MessageResponse;
 import message.response.VersionResponse;
 import model.DownloadTicket;
 
-public class TCPFileServer extends Thread implements IFileServer {
+public class FileServer extends Thread implements IFileServer {
 
-	private static final Logger log = Logger.getLogger(TCPFileServer.class);
+	private static final Logger log = Logger.getLogger(FileServer.class);
 	
 	private Socket socket;
 	private ObjectInputStream in;
 	private ObjectOutputStream out;
 	private String fsDir;
 
-	public TCPFileServer(Socket socket, String fsDir) {
+	public FileServer(Socket socket, String fsDir) {
 		this.socket = socket;
 		this.fsDir = fsDir;
 	}

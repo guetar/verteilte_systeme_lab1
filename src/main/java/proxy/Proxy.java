@@ -43,10 +43,10 @@ import message.response.VersionResponse;
 import model.DownloadTicket;
 import model.FileServerInfo;
 
-public class TCPProxy extends Thread implements IProxy {
+public class Proxy extends Thread implements IProxy {
 	
-	private static final Logger log = Logger.getLogger(TCPProxy.class);
-	private static Map<String, TCPProxy> sessions = Collections.synchronizedMap(new HashMap<String, TCPProxy>());
+	private static final Logger log = Logger.getLogger(Proxy.class);
+	private static Map<String, Proxy> sessions = Collections.synchronizedMap(new HashMap<String, Proxy>());
 	
 	private Socket socket;
 	private ObjectInputStream in;
@@ -54,7 +54,7 @@ public class TCPProxy extends Thread implements IProxy {
 	private String username;
 	private String password;
 
-	public TCPProxy(Socket socket) {
+	public Proxy(Socket socket) {
 		this.socket = socket;
 	}
 	
@@ -106,7 +106,7 @@ public class TCPProxy extends Thread implements IProxy {
         }
     }
     
-    public static Map<String, TCPProxy> getSessions() {
+    public static Map<String, Proxy> getSessions() {
     	return sessions;
     }
 
@@ -246,7 +246,9 @@ public class TCPProxy extends Thread implements IProxy {
 	public MessageResponse logout() throws IOException {
 		if (!sessions.containsValue(this)) return null;
 
-        interrupt();
+		socket.shutdownOutput();
+        socket.shutdownInput();
+        
         ProxyCli.logout(username);
         sessions.remove(username);
         return new MessageResponse("User successfully logged out.");

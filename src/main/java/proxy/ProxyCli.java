@@ -1,6 +1,8 @@
 package proxy;
 
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.ArrayList;
@@ -10,8 +12,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -49,10 +51,13 @@ public class ProxyCli implements IProxyCli {
 	private int fsCheckperiod;
 	
 	private ServerSocket tcpSocket;
+	private DatagramSocket udpSocket;
+	
+	private Timer udpTimer;
+	private TimerTask udpTimerTask;
 
 	private Thread shellThread;
 	private Thread clientThread;
-	private UDPProxy udpProxy;
 	
 	public static void main(String[] args) throws Exception {
 		
@@ -97,24 +102,45 @@ public class ProxyCli implements IProxyCli {
                 pws.put(username, password);
             }
         }
-		
-        udpProxy = new UDPProxy(udpPort, fsCheckperiod, fsTimeout);
-        udpProxy.start();
         
         try {
-	        tcpSocket = new ServerSocket(tcpPort);
-	        
-        } catch(IOException e) {
+			udpSocket = new DatagramSocket(udpPort);
+			tcpSocket = new ServerSocket(tcpPort);
+			
+		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
-        }
+		}
+	    
+        udpTimerTask = new TimerTask() {
+        	@Override
+            public void run() {
+    	        try {
+	                byte[] buffer = new byte[12];
+	                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+                    ProxyCli.emptyServers();
+                    udpSocket.receive(packet);
+                    
+                    int port = Integer.parseInt(new String(packet.getData()).substring(7));
+                    ProxyCli.addServer(new FileServerInfo(packet.getAddress(), port, 0, true));
+        	        
+    		    } catch (IOException e) {
+    				// TODO Auto-generated catch block
+    		    	return;
+    		    }
+            }
+        };
+        
+        udpTimer = new Timer();
+        udpTimer.schedule(udpTimerTask, fsCheckperiod);
         
 		clientThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
 				while(true) {
 					try {
-						pool.submit(new TCPProxy(tcpSocket.accept()));
+						pool.submit(new Proxy(tcpSocket.accept()));
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						break;
@@ -186,9 +212,9 @@ public class ProxyCli implements IProxyCli {
     @Override
     public MessageResponse exit() throws IOException {
     	log.info("Shutting down ...");
-        Map<String, TCPProxy> sessions = TCPProxy.getSessions();
+        Map<String, Proxy> sessions = Proxy.getSessions();
         
-        for (Map.Entry<String, TCPProxy> session : sessions.entrySet()) {
+        for (Map.Entry<String, Proxy> session : sessions.entrySet()) {
             session.getValue().logout();
         }
 
@@ -197,8 +223,7 @@ public class ProxyCli implements IProxyCli {
         System.in.close();
         
         clientThread.interrupt();
-        udpProxy.interrupt();
-        tcpSocket.close();
+        udpTimer.purge();
         pool.shutdown();
         try {
             // Wait a while for existing tasks to terminate.
@@ -217,6 +242,9 @@ public class ProxyCli implements IProxyCli {
             Thread.currentThread().interrupt();
         }
 
+        udpSocket.close();
+        tcpSocket.close();
+        
         return new MessageResponse("exit");
     }
 }

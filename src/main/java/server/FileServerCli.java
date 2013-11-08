@@ -1,7 +1,13 @@
 package server;
 
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.net.SocketException;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -13,6 +19,7 @@ import util.Config;
 import cli.Shell;
 import cli.Command;
 import message.response.MessageResponse;
+import model.FileServerInfo;
 
 public class FileServerCli implements IFileServerCli {
 
@@ -23,9 +30,11 @@ public class FileServerCli implements IFileServerCli {
 	private Config configFs;
 	private Shell shell;
 
-	private UDPFileServer udpFileServer;
 	private ServerSocket tcpSocket;
+	private DatagramSocket udpSocket;
 	private Thread proxyThread;
+	private TimerTask udpTimerTask;
+	private Timer udpTimer;
 	
 	private String fsDir;
 	private String fsHost;
@@ -66,23 +75,43 @@ public class FileServerCli implements IFileServerCli {
 			e.printStackTrace();
 		}
 		
-		udpFileServer = new UDPFileServer(fsHost, udpPort, tcpPort, fsAlive);
-		udpFileServer.start();
-		
-        try {
+		try {
+			udpSocket = new DatagramSocket();
 			tcpSocket = new ServerSocket(tcpPort);
-	        
-		} catch (IOException e1) {
+			
+		} catch (IOException e) {
 			// TODO Auto-generated catch block
-			e1.printStackTrace();
+			e.printStackTrace();
 		}
+		
+        udpTimerTask = new TimerTask() {
+        	@Override
+            public void run() {
+            	try {
+        			InetAddress IPAddress = InetAddress.getByName(fsHost);
+        	    	String message = "isAlive" + tcpPort;
+        	    	byte[] buffer = new byte[12];
+        	    	buffer = message.getBytes();
+        	        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, IPAddress, udpPort);
+        	        
+        	        udpSocket.send(packet);
+        	        
+            	} catch(IOException e) {
+        			// TODO Auto-generated catch block
+        			e.printStackTrace();
+            	}
+            }
+        };
+        
+        udpTimer = new Timer();
+        udpTimer.schedule(udpTimerTask, fsAlive);
         
 		proxyThread = new Thread(new Runnable() {
 			@Override
 			public void run() {
 				while(true) {
 					try {
-						pool.submit(new TCPFileServer(tcpSocket.accept(), fsDir));
+						pool.submit(new FileServer(tcpSocket.accept(), fsDir));
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						break;
@@ -99,8 +128,12 @@ public class FileServerCli implements IFileServerCli {
 	@Override
 	public MessageResponse exit() throws IOException {
 		proxyThread.interrupt();
-		tcpSocket.close();
+        udpTimer.purge();
 		pool.shutdown();
+
+        udpSocket.close();
+        tcpSocket.close();
+        
 		return new MessageResponse("exit");
 	}
 
