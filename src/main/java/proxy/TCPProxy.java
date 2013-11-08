@@ -7,8 +7,11 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -43,7 +46,7 @@ import model.FileServerInfo;
 public class TCPProxy extends Thread implements IProxy {
 	
 	private static final Logger log = Logger.getLogger(TCPProxy.class);
-	private static ConcurrentHashMap<String, TCPProxy> sessions = new ConcurrentHashMap<String, TCPProxy>();;
+	private static Map<String, TCPProxy> sessions = Collections.synchronizedMap(new HashMap<String, TCPProxy>());
 	
 	private Socket socket;
 	private ObjectInputStream in;
@@ -103,7 +106,7 @@ public class TCPProxy extends Thread implements IProxy {
         }
     }
     
-    public static ConcurrentHashMap<String, TCPProxy> getSessions() {
+    public static Map<String, TCPProxy> getSessions() {
     	return sessions;
     }
 
@@ -143,14 +146,14 @@ public class TCPProxy extends Thread implements IProxy {
 	@Command
 	@Override
 	public Response buy(BuyRequest credits) throws IOException {
-		long newCredits = ProxyCli.buy(username, credits.getCredits());
+		long newCredits = ProxyCli.updateCredits(username, credits.getCredits());
 		return new BuyResponse(newCredits);
 	}
 
 	@Command
 	@Override
 	public Response list() throws IOException {
-		List<FileServerInfo> servers = ProxyCli.listFileservers();
+		List<FileServerInfo> servers = ProxyCli.listServers();
 		Set<String> files = new HashSet<String>();
 		
 		for(FileServerInfo fs : servers) {
@@ -178,7 +181,7 @@ public class TCPProxy extends Thread implements IProxy {
 	@Command
 	@Override
 	public Response download(DownloadTicketRequest request) throws IOException {
-		List<FileServerInfo> servers = ProxyCli.listFileservers();
+		List<FileServerInfo> servers = ProxyCli.listServers();
 		
 		for(FileServerInfo fs : servers) {
 			try {
@@ -213,8 +216,29 @@ public class TCPProxy extends Thread implements IProxy {
 	@Command
 	@Override
 	public MessageResponse upload(UploadRequest request) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		List<FileServerInfo> servers = ProxyCli.listServers();
+	
+		for(FileServerInfo fs : servers) {
+			try {
+				Socket socket = new Socket(fs.getAddress(), fs.getPort());
+				ObjectInputStream i = new ObjectInputStream(socket.getInputStream());
+				ObjectOutputStream o = new ObjectOutputStream(socket.getOutputStream());
+				
+				o.writeObject(request);
+				MessageResponse serverResponse = (MessageResponse) i.readObject();
+				long newCredits = ProxyCli.updateCredits(username, request.getContent().length);
+				MessageResponse response = new MessageResponse(serverResponse.getMessage() + "\nYou now have " + newCredits + " credits.");
+	            
+	            socket.shutdownOutput();
+	            socket.close();
+	            
+	            return response;
+	            
+	        } catch (ClassNotFoundException e) {
+	            log.error("ClassNotFoundException in ClientCli.login()");
+	        }
+		}
+	return null;
 	}
 
 	@Command

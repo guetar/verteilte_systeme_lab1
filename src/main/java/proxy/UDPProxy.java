@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketException;
+import java.util.List;
+import java.util.Timer;
 
 import model.FileServerInfo;
 
@@ -35,6 +37,7 @@ public class UDPProxy extends Thread {
 
 	    while(true) {
 	        try {
+                ProxyCli.emptyServers();
                 udpSocket.receive(packet);
                 
                 int port = Integer.parseInt(new String(packet.getData()).substring(7));
@@ -43,7 +46,7 @@ public class UDPProxy extends Thread {
     	        
 		    } catch (InterruptedException | IOException e) {
 				// TODO Auto-generated catch block
-		    	break;
+		    	return;
 		    }
         }
     }

@@ -1,5 +1,8 @@
 package client;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -12,6 +15,7 @@ import message.request.DownloadTicketRequest;
 import message.request.ListRequest;
 import message.request.LoginRequest;
 import message.request.LogoutRequest;
+import message.request.UploadRequest;
 import message.response.BuyResponse;
 import message.response.CreditsResponse;
 import message.response.DownloadFileResponse;
@@ -169,7 +173,13 @@ public class ClientCli implements IClientCli {
 		
 		try {
 			out.writeObject(new DownloadTicketRequest(filename));
-			return (DownloadFileResponse) in.readObject();
+			DownloadFileResponse response = (DownloadFileResponse) in.readObject();
+			
+			FileOutputStream fos = new FileOutputStream(downloadDir + "/" + response.getTicket().getFilename());
+			fos.write(response.getContent());
+			fos.close();
+			
+			return response;
 			
 		} catch(ClassNotFoundException e) {
             log.error("ClassNotFoundException in ClientCli.list()");
@@ -180,7 +190,25 @@ public class ClientCli implements IClientCli {
 	@Command
 	@Override
 	public MessageResponse upload(String filename) throws IOException {
-		// TODO Auto-generated method stub
+		if (!loggedIn) {
+            log.info("User is not logged in.");
+            return null;
+        }
+		
+		try {
+			File file = new File(downloadDir + "/" + filename);
+			byte[] fileBytes = new byte[(int) file.length()];
+			
+			FileInputStream fis = new FileInputStream(file);
+		    fis.read(fileBytes);
+		    fis.close();
+		    
+			out.writeObject(new UploadRequest(filename, 1, fileBytes));
+			return (MessageResponse) in.readObject();
+			
+		} catch(ClassNotFoundException e) {
+            log.error("ClassNotFoundException in ClientCli.list()");
+		}
 		return null;
 	}
 

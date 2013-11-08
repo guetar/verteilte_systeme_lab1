@@ -12,10 +12,7 @@ import server.IFileServerCli;
  * Provides methods for starting an arbitrary amount of various components.
  */
 public class ComponentFactory {
-
-	private ProxyCli proxyCli;
-	private FileServerCli fsCli;
-	private IClientCli clientCli;
+	
 	/**
 	 * Creates and starts a new client instance using the provided {@link Config} and {@link Shell}.
 	 *
@@ -25,10 +22,7 @@ public class ComponentFactory {
 	 * @throws Exception if an exception occurs
 	 */
 	public IClientCli startClient(Config config, Shell shell) throws Exception {
-		if (clientCli == null) {
-			clientCli = new ClientCli(config, shell);
-		}
-		return clientCli;
+		return new ClientCli(config, shell);
 	}
 
 	/**
@@ -40,10 +34,7 @@ public class ComponentFactory {
 	 * @throws Exception if an exception occurs
 	 */
 	public IProxyCli startProxy(Config config, Shell shell) throws Exception {
-		if (proxyCli == null) {
-			proxyCli = new ProxyCli(config, shell);
-		}
-		return proxyCli;
+		return new ProxyCli(config, shell);
 	}
 
 	/**
@@ -55,9 +46,6 @@ public class ComponentFactory {
 	 * @throws Exception if an exception occurs
 	 */
 	public IFileServerCli startFileServer(Config config, Shell shell) throws Exception {
-		if (fsCli == null) {
-			fsCli = new FileServerCli(config, shell);
-		}
-		return fsCli;
+		return new FileServerCli(config, shell);
 	}
 }

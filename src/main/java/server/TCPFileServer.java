@@ -3,12 +3,16 @@ package server;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,7 +42,6 @@ import model.DownloadTicket;
 public class TCPFileServer extends Thread implements IFileServer {
 
 	private static final Logger log = Logger.getLogger(TCPFileServer.class);
-	private static ConcurrentHashMap<String, TCPFileServer> sessions = new ConcurrentHashMap<String, TCPFileServer>();;
 	
 	private Socket socket;
 	private ObjectInputStream in;
@@ -96,8 +99,8 @@ public class TCPFileServer extends Thread implements IFileServer {
         }
     }
     
-    public static ConcurrentHashMap<String, TCPFileServer> getSessions() {
-    	return sessions;
+    public static int getVersion(String filename) {
+    	return 1;
     }
 
 	@Command
@@ -119,17 +122,17 @@ public class TCPFileServer extends Thread implements IFileServer {
 	public Response download(DownloadFileRequest request) throws IOException {
 		DownloadTicket ticket = request.getTicket();
 		
+		File file = new File(fsDir + "/" + ticket.getFilename());
 		InfoResponse info = (InfoResponse) info(new InfoRequest(ticket.getFilename()));
 		VersionResponse version = (VersionResponse) version(new VersionRequest(ticket.getFilename()));
 		String checksum = ChecksumUtils.generateChecksum(ticket.getUsername(), ticket.getFilename(), version.getVersion(), info.getSize());
 		
-		if(checksum.equals(ticket.getChecksum())) {
-			File file = new File(fsDir + "/" + ticket.getFilename());
+		if(ChecksumUtils.verifyChecksum(ticket.getUsername(), file, version.getVersion(), checksum)) {
 			byte[] fileBytes = new byte[(int) file.length()];
 			
-			FileInputStream fileInputStream = new FileInputStream(file);
-		    fileInputStream.read(fileBytes);
-		    fileInputStream.close();
+			FileInputStream fis = new FileInputStream(file);
+		    fis.read(fileBytes);
+		    fis.close();
 		    
 			return new DownloadFileResponse(ticket, fileBytes);
 		} else {
@@ -148,15 +151,18 @@ public class TCPFileServer extends Thread implements IFileServer {
 	@Command
 	@Override
 	public Response version(VersionRequest request) throws IOException {
-		// TODO fully implement
 		return new VersionResponse(request.getFilename(), 1);
 	}
 
 	@Command
 	@Override
 	public MessageResponse upload(UploadRequest request) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		
+		FileOutputStream fos = new FileOutputStream(fsDir + "/" + request.getFilename());
+		fos.write(request.getContent());
+		fos.close();
+		
+		return new MessageResponse("File successfully uploaded.");
 	}
 
 }

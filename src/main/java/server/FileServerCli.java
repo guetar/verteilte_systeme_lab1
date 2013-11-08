@@ -35,6 +35,9 @@ public class FileServerCli implements IFileServerCli {
 
 	public static void main(String[] args) throws Exception {
 		
+		for(String arg : args) {
+			log.info(arg);
+		}
 		Config config = new Config("fs1");
 		Shell shell = new Shell("fs1", System.out, System.in);
 		

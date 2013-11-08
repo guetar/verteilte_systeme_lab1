@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.ResourceBundle;
@@ -12,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import message.Response;
 import message.response.FileServerInfoResponse;
@@ -32,9 +35,9 @@ public class ProxyCli implements IProxyCli {
 	private static final Logger log = Logger.getLogger(ProxyCli.class);
 	
     private static ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-	private static ConcurrentHashMap<InetAddress, FileServerInfo> servers = new ConcurrentHashMap<InetAddress, FileServerInfo>();
-    private static ConcurrentHashMap<String, String> pws = new ConcurrentHashMap<String, String>();;
-    private static ConcurrentHashMap<String, User> users = new ConcurrentHashMap<String, User>();
+	private static Map<InetAddress, FileServerInfo> servers = Collections.synchronizedMap(new HashMap<InetAddress, FileServerInfo>());
+    private static Map<String, User> users = Collections.synchronizedMap(new HashMap<String, User>());
+    private static Map<String, String> pws = new HashMap<String, String>();
 	
     private Config configProxy;
     private Config configUser;
@@ -142,11 +145,15 @@ public class ProxyCli implements IProxyCli {
 		return users.get(username).getCredits();
 	}
 	
-	public static synchronized long buy(String username, long credits) {
+	public static synchronized long updateCredits(String username, long credits) {
 		User user = users.remove(username);
 		long newCredits = user.getCredits() + credits;
 		users.put(user.getName(), new User(user.getName(), newCredits, user.isOnline()));
 		return newCredits;
+	}
+	
+	public static synchronized void emptyServers() {
+		servers.clear();
 	}
 	
 	public static synchronized void addServer(FileServerInfo info) {
@@ -157,7 +164,7 @@ public class ProxyCli implements IProxyCli {
 		servers.remove(info.getAddress());
 	}
 	
-	public static synchronized List<FileServerInfo> listFileservers() {
+	public static synchronized List<FileServerInfo> listServers() {
 		return new ArrayList<FileServerInfo>(servers.values());
 	}
 	
@@ -179,7 +186,7 @@ public class ProxyCli implements IProxyCli {
     @Override
     public MessageResponse exit() throws IOException {
     	log.info("Shutting down ...");
-        ConcurrentMap<String, TCPProxy> sessions = TCPProxy.getSessions();
+        Map<String, TCPProxy> sessions = TCPProxy.getSessions();
         
         for (Map.Entry<String, TCPProxy> session : sessions.entrySet()) {
             session.getValue().logout();
@@ -193,6 +200,22 @@ public class ProxyCli implements IProxyCli {
         udpProxy.interrupt();
         tcpSocket.close();
         pool.shutdown();
+        try {
+            // Wait a while for existing tasks to terminate.
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("forcing termination with pool.shutdownNow()");
+                pool.shutdownNow();  // Cancel currently executing tasks
+                // Wait a while for tasks to respond to being cancelled.
+                if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.error("pool did not terminate");
+                }
+            }
+        } catch (InterruptedException ex) {
+            // (Re-)Cancel if current thread also interrupted.
+            pool.shutdownNow();
+            // Preserve interrupt status.
+            Thread.currentThread().interrupt();
+        }
 
         return new MessageResponse("exit");
     }
