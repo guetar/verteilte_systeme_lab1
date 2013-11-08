@@ -244,10 +244,9 @@ public class Proxy extends Thread implements IProxy {
 	@Command
 	@Override
 	public MessageResponse logout() throws IOException {
-		if (!sessions.containsValue(this)) return null;
 
-		socket.shutdownOutput();
-        socket.shutdownInput();
+//		socket.shutdownOutput();
+//      socket.shutdownInput();
         
         ProxyCli.logout(username);
         sessions.remove(username);

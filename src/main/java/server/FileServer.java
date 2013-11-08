@@ -110,7 +110,7 @@ public class FileServer extends Thread implements IFileServer {
 		Set<String> files = new HashSet<String>();
 		
 		for (File f : folder.listFiles()) {
-			if (f.isFile()) {
+			if (f.isFile() && f.getName().endsWith(".txt")) {
 				files.add(f.getName());
 			}
 		}

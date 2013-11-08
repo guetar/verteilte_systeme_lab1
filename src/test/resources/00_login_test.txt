@@ -4,17 +4,18 @@
 *	startFileServer fs2
 
 client:	!login alice 12345
+proxy:	!users
+
 client:	!credits
 client: !buy 50
+
+proxy:  !fileservers
 client: !list
 client: !upload upload.txt
 client: !download short.txt
 
-proxy:	!users
 client: !logout
 proxy:  !users
-
-proxy:  !fileservers
 
 proxy:	!exit
 client:	!exit

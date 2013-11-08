@@ -163,7 +163,7 @@ public class ProxyCli implements IProxyCli {
 	}
 	
 	public static synchronized void logout(String username) {
-		User user = users.remove(username);
+		User user = users.remove(username); log.info("Logging out " + username);
         users.put(user.getName(), new User(user.getName(), user.getCredits(), false));
 	}
 	

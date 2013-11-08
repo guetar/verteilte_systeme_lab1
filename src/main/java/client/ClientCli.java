@@ -232,8 +232,6 @@ public class ClientCli implements IClientCli {
             
             loggedIn = false;
             return response;
-            
-        } catch (EOFException e) {
         	
         } catch (ClassNotFoundException e) {
             log.error("ClassNotFoundException in ClientCli.logout()");
