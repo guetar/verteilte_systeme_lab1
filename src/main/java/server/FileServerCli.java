@@ -44,9 +44,6 @@ public class FileServerCli implements IFileServerCli {
 
 	public static void main(String[] args) throws Exception {
 		
-		for(String arg : args) {
-			log.info(arg);
-		}
 		Config config = new Config("fs1");
 		Shell shell = new Shell("fs1", System.out, System.in);
 		
@@ -58,6 +55,7 @@ public class FileServerCli implements IFileServerCli {
 		
 		this.configFs = config;
 		this.shell = shell;
+		log.info(configFs.getString("fileserver"));
 
 		shell.register(this);
 		shellThread = new Thread(shell);
@@ -89,12 +87,13 @@ public class FileServerCli implements IFileServerCli {
             public void run() {
             	try {
         			InetAddress IPAddress = InetAddress.getByName(fsHost);
-        	    	String message = "isAlive" + tcpPort;
+        	    	String message = "!alive " + tcpPort;
         	    	byte[] buffer = new byte[12];
         	    	buffer = message.getBytes();
         	        DatagramPacket packet = new DatagramPacket(buffer, buffer.length, IPAddress, udpPort);
         	        
         	        udpSocket.send(packet);
+        	        log.info("sent: " + new String(packet.getData()));
         	        
             	} catch(IOException e) {
         			// TODO Auto-generated catch block

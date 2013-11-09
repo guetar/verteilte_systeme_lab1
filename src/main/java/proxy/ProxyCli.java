@@ -14,6 +14,7 @@ import java.util.ResourceBundle;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -37,7 +38,7 @@ public class ProxyCli implements IProxyCli {
 	private static final Logger log = Logger.getLogger(ProxyCli.class);
 	
     private static ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-	private static Map<InetAddress, FileServerInfo> servers = Collections.synchronizedMap(new HashMap<InetAddress, FileServerInfo>());
+	private static Map<Integer, FileServerInfo> servers = Collections.synchronizedMap(new HashMap<Integer, FileServerInfo>());
     private static Map<String, User> users = Collections.synchronizedMap(new HashMap<String, User>());
     private static Map<String, String> pws = new HashMap<String, String>();
 	
@@ -58,6 +59,8 @@ public class ProxyCli implements IProxyCli {
 
 	private Thread shellThread;
 	private Thread clientThread;
+
+	private Thread serverThread;
 	
 	public static void main(String[] args) throws Exception {
 		
@@ -111,29 +114,59 @@ public class ProxyCli implements IProxyCli {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-	    
-        udpTimerTask = new TimerTask() {
+
+        class UDPTimerTask extends TimerTask {
+        	
+        	private int port;
+        	
+        	public UDPTimerTask(int port) {
+        		this.port = port;
+        	}
+        	
         	@Override
             public void run() {
-    	        try {
-	                byte[] buffer = new byte[12];
-	                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-
-                    ProxyCli.emptyServers();
-                    udpSocket.receive(packet);
-                    
-                    int port = Integer.parseInt(new String(packet.getData()).substring(7));
-                    ProxyCli.addServer(new FileServerInfo(packet.getAddress(), port, 0, true));
-        	        
-    		    } catch (IOException e) {
-    				// TODO Auto-generated catch block
-    		    	return;
-    		    }
+        		while(true) {
+	    	        try {
+		                byte[] buffer = new byte[12];
+		                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+	
+	                    udpSocket.receive(packet);
+	                    log.info("received: " + new String(packet.getData()));
+	                    
+	                    int port = Integer.parseInt(new String(packet.getData()).substring(7));
+	                    ProxyCli.addServer(new FileServerInfo(packet.getAddress(), port, 0, true));
+	                    Thread.sleep(fsTimeout);
+	        	        
+	    		    } catch (InterruptedException | IOException e) {
+	    				// TODO Auto-generated catch block
+	    		    	return;
+	    		    }
+        		}
             }
         };
-        
-        udpTimer = new Timer();
-        udpTimer.schedule(udpTimerTask, fsCheckperiod);
+
+        serverThread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				while(true) {
+	    	        try {
+		                byte[] buffer = new byte[12];
+		                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+	
+	                    udpSocket.receive(packet);
+	                    log.info("received: " + new String(packet.getData()));
+	                    udpTimer.schedule(new UDPTimerTask(packet.getPort()), fsTimeout);
+	                    
+	                    int port = Integer.parseInt(new String(packet.getData()).substring(7));
+	                    ProxyCli.addServer(new FileServerInfo(packet.getAddress(), port, 0, true));
+	        	        
+	    		    } catch (IOException e) {
+	    				// TODO Auto-generated catch block
+	    		    	return;
+	    		    }
+        		}
+			}
+        });
         
 		clientThread = new Thread(new Runnable() {
 			@Override
@@ -148,6 +181,10 @@ public class ProxyCli implements IProxyCli {
 				}
 			}
 		});
+		
+
+        udpTimer = new Timer();
+		serverThread.start();
 		clientThread.start();
 		
 		log.info("Proxy started ...");
@@ -183,7 +220,7 @@ public class ProxyCli implements IProxyCli {
 	}
 	
 	public static synchronized void addServer(FileServerInfo info) {
-		servers.put(info.getAddress(), info);
+		servers.put(info.getPort(), info);
 	}
 
 	public static synchronized void removeServer(FileServerInfo info) {
