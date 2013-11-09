@@ -28,6 +28,7 @@ import message.request.DownloadTicketRequest;
 import message.request.InfoRequest;
 import message.request.ListRequest;
 import message.request.LoginRequest;
+import message.request.LogoutRequest;
 import message.request.UploadRequest;
 import message.request.VersionRequest;
 import message.response.BuyResponse;
@@ -80,6 +81,8 @@ public class Proxy extends Thread implements IProxy {
 						out.writeObject(download((DownloadTicketRequest) request));
 					} else if(request instanceof UploadRequest) {
 						out.writeObject(upload((UploadRequest) request));
+					} else if(request instanceof LogoutRequest) {
+						out.writeObject(logout());
 					}
 					
 				} catch(SocketException | EOFException e) {
@@ -126,11 +129,12 @@ public class Proxy extends Thread implements IProxy {
 	    } else if (password.equals(ProxyCli.getPassword(username))) {
 	    	
 	        sessions.put(username, this);
-	        ProxyCli.login(username);
+	        ProxyCli.setUserOnline(username, true);
 	        return new LoginResponse(Type.SUCCESS);
 	        
 	    } else {
-	    	
+
+	        log.info("Wrong username or password");
 	        interrupt();
 	        return new LoginResponse(Type.WRONG_CREDENTIALS);
 	    }
@@ -183,33 +187,62 @@ public class Proxy extends Thread implements IProxy {
 	public Response download(DownloadTicketRequest request) throws IOException {
 		List<FileServerInfo> servers = ProxyCli.listServers();
 		
-		for(FileServerInfo fs : servers) {
-			try {
-				Socket socket = new Socket(fs.getAddress(), fs.getPort());
-				ObjectInputStream i = new ObjectInputStream(socket.getInputStream());
-				ObjectOutputStream o = new ObjectOutputStream(socket.getOutputStream());
+		Socket socket;
+		ObjectInputStream i;
+		ObjectOutputStream o;
+		
+		long usage = Long.MAX_VALUE;
+		FileServerInfo chosen = null;
+
+		try {
+			for(FileServerInfo fs : servers) {
+				socket = new Socket(fs.getAddress(), fs.getPort());
+				i = new ObjectInputStream(socket.getInputStream());
+				o = new ObjectOutputStream(socket.getOutputStream());
 				
 				o.writeObject(new InfoRequest(request.getFilename()));
 				InfoResponse info = (InfoResponse) i.readObject();
-				
-				o.writeObject(new VersionRequest(request.getFilename()));
-				VersionResponse version = (VersionResponse) i.readObject();
-				
-				String checksum = ChecksumUtils.generateChecksum(username, info.getFilename(), version.getVersion(), info.getSize());
-				DownloadTicket ticket = new DownloadTicket(username, info.getFilename(), checksum, fs.getAddress(), fs.getPort());
-				
-				o.writeObject(new DownloadFileRequest(ticket));
-	            DownloadFileResponse fileResponse = (DownloadFileResponse) i.readObject();
-	            
+	
 	            socket.shutdownOutput();
 	            socket.close();
 	            
-	            return fileResponse;
-	            
-	        } catch (ClassNotFoundException e) {
-	            log.error("ClassNotFoundException in ClientCli.login()");
-	        }
-		}
+				if (info != null && fs.getUsage() < usage) chosen = fs;
+			}
+			
+			if (chosen == null) {
+				log.info("File does not exist on server.");
+				return null;
+			}
+		
+			socket = new Socket(chosen.getAddress(), chosen.getPort());
+			i = new ObjectInputStream(socket.getInputStream());
+			o = new ObjectOutputStream(socket.getOutputStream());
+			
+			o.writeObject(new InfoRequest(request.getFilename()));
+			InfoResponse info = (InfoResponse) i.readObject();
+			
+			o.writeObject(new VersionRequest(request.getFilename()));
+			VersionResponse version = (VersionResponse) i.readObject();
+			
+			String checksum = ChecksumUtils.generateChecksum(username, info.getFilename(), version.getVersion(), info.getSize());
+			DownloadTicket ticket = new DownloadTicket(username, info.getFilename(), checksum, chosen.getAddress(), chosen.getPort());
+			
+			o.writeObject(new DownloadFileRequest(ticket));
+            DownloadFileResponse fileResponse = (DownloadFileResponse) i.readObject();
+            
+            if (ProxyCli.updateCredits(username, (int) -info.getSize()) < 0) {
+            	log.info("You do not have enough credits to download the file.");
+            	return null;
+            }
+            
+            socket.shutdownOutput();
+            socket.close();
+            
+            return fileResponse;
+            
+        } catch (ClassNotFoundException e) {
+            log.error("ClassNotFoundException in ClientCli.login()");
+        }
 		return null;
 	}
 
@@ -245,11 +278,9 @@ public class Proxy extends Thread implements IProxy {
 	@Override
 	public MessageResponse logout() throws IOException {
 
-//		socket.shutdownOutput();
-//      socket.shutdownInput();
-        
-        ProxyCli.logout(username);
+        ProxyCli.setUserOnline(username, false);
         sessions.remove(username);
+        
         return new MessageResponse("User successfully logged out.");
 	}
 }

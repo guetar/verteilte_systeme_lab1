@@ -38,8 +38,8 @@ public class ProxyCli implements IProxyCli {
 	private static final Logger log = Logger.getLogger(ProxyCli.class);
 	
     private static ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-	private static Map<Integer, FileServerInfo> servers = Collections.synchronizedMap(new HashMap<Integer, FileServerInfo>());
-    private static Map<String, User> users = Collections.synchronizedMap(new HashMap<String, User>());
+	private static ConcurrentHashMap<Integer, FileServerInfo> servers = new ConcurrentHashMap<Integer, FileServerInfo>();
+    private static ConcurrentHashMap<String, User> users = new ConcurrentHashMap<String, User>();
     private static Map<String, String> pws = new HashMap<String, String>();
 	
     private Config configProxy;
@@ -117,24 +117,26 @@ public class ProxyCli implements IProxyCli {
 
         class UDPTimerTask extends TimerTask {
         	
-        	private int port;
+        	private int udpPort;
         	
-        	public UDPTimerTask(int port) {
-        		this.port = port;
+        	public UDPTimerTask(int udpPort) {
+        		this.udpPort = udpPort;
         	}
         	
         	@Override
             public void run() {
         		while(true) {
 	    	        try {
+	                    ProxyCli.setServerOnline(udpPort, false);
+	                    
 		                byte[] buffer = new byte[12];
 		                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 	
 	                    udpSocket.receive(packet);
 	                    log.info("received: " + new String(packet.getData()));
+	                    int tcpPort = Integer.parseInt(new String(packet.getData()).substring(7));
+	                    ProxyCli.setServerOnline(udpPort, true);
 	                    
-	                    int port = Integer.parseInt(new String(packet.getData()).substring(7));
-	                    ProxyCli.addServer(new FileServerInfo(packet.getAddress(), port, 0, true));
 	                    Thread.sleep(fsTimeout);
 	        	        
 	    		    } catch (InterruptedException | IOException e) {
@@ -155,10 +157,10 @@ public class ProxyCli implements IProxyCli {
 	
 	                    udpSocket.receive(packet);
 	                    log.info("received: " + new String(packet.getData()));
-	                    udpTimer.schedule(new UDPTimerTask(packet.getPort()), fsTimeout);
 	                    
 	                    int port = Integer.parseInt(new String(packet.getData()).substring(7));
-	                    ProxyCli.addServer(new FileServerInfo(packet.getAddress(), port, 0, true));
+	                    ProxyCli.addServer(packet.getPort(), new FileServerInfo(packet.getAddress(), port, 0, true));
+	                    udpTimer.schedule(new UDPTimerTask(packet.getPort()), fsTimeout);
 	        	        
 	    		    } catch (IOException e) {
 	    				// TODO Auto-generated catch block
@@ -194,14 +196,9 @@ public class ProxyCli implements IProxyCli {
 		return pws.get(username);
 	}
 	
-	public static synchronized void login(String username) {
+	public static synchronized void setUserOnline(String username, boolean online) {
 		User user = users.remove(username);
-        users.put(user.getName(), new User(user.getName(), user.getCredits(), true));
-	}
-	
-	public static synchronized void logout(String username) {
-		User user = users.remove(username); log.info("Logging out " + username);
-        users.put(user.getName(), new User(user.getName(), user.getCredits(), false));
+        users.put(user.getName(), new User(user.getName(), user.getCredits(), online));
 	}
 	
 	public static synchronized long credits(String username) {
@@ -211,23 +208,24 @@ public class ProxyCli implements IProxyCli {
 	public static synchronized long updateCredits(String username, long credits) {
 		User user = users.remove(username);
 		long newCredits = user.getCredits() + credits;
-		users.put(user.getName(), new User(user.getName(), newCredits, user.isOnline()));
+		if (newCredits >= 0) users.put(user.getName(), new User(user.getName(), newCredits, user.isOnline()));
 		return newCredits;
 	}
 	
-	public static synchronized void emptyServers() {
-		servers.clear();
+	public static synchronized void addServer(int udpPort, FileServerInfo info) {
+		servers.put(udpPort, info);
 	}
 	
-	public static synchronized void addServer(FileServerInfo info) {
-		servers.put(info.getPort(), info);
-	}
-
-	public static synchronized void removeServer(FileServerInfo info) {
-		servers.remove(info.getAddress());
+	public static synchronized void removeServer(int udpPort) {
+		servers.remove(udpPort);
 	}
 	
-	public static synchronized List<FileServerInfo> listServers() {
+	public static synchronized void setServerOnline(int udpPort, boolean online) {
+		FileServerInfo fs = servers.remove(udpPort);
+		servers.put(udpPort, new FileServerInfo(fs.getAddress(), fs.getPort(), fs.getUsage(), online));
+	}
+	
+	public static synchronized List listServers() {
 		return new ArrayList<FileServerInfo>(servers.values());
 	}
 	
@@ -262,22 +260,6 @@ public class ProxyCli implements IProxyCli {
         clientThread.interrupt();
         udpTimer.purge();
         pool.shutdown();
-        try {
-            // Wait a while for existing tasks to terminate.
-            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-                log.warn("forcing termination with pool.shutdownNow()");
-                pool.shutdownNow();  // Cancel currently executing tasks
-                // Wait a while for tasks to respond to being cancelled.
-                if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
-                    log.error("pool did not terminate");
-                }
-            }
-        } catch (InterruptedException ex) {
-            // (Re-)Cancel if current thread also interrupted.
-            pool.shutdownNow();
-            // Preserve interrupt status.
-            Thread.currentThread().interrupt();
-        }
 
         udpSocket.close();
         tcpSocket.close();

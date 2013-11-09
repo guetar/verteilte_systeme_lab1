@@ -226,10 +226,6 @@ public class ClientCli implements IClientCli {
             out.writeObject(new LogoutRequest());
             MessageResponse response = (MessageResponse) in.readObject();
             
-            socket.shutdownOutput();
-            socket.shutdownInput();
-            socket.close();
-            
             loggedIn = false;
             return response;
         	
@@ -242,8 +238,12 @@ public class ClientCli implements IClientCli {
 	@Command
 	@Override
 	public MessageResponse exit() throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+		
+        socket.shutdownOutput();
+        socket.shutdownInput();
+        socket.close();
+        
+        return new MessageResponse("exit");
 	}
 
 }

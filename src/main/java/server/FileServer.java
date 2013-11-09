@@ -145,7 +145,7 @@ public class FileServer extends Thread implements IFileServer {
 	@Override
 	public Response info(InfoRequest request) throws IOException {
 		File file = new File(fsDir + "/" + request.getFilename());
-		return new InfoResponse(request.getFilename(), file.length());
+		return (file != null) ? new InfoResponse(request.getFilename(), file.length()) : null;
 	}
 
 	@Command
