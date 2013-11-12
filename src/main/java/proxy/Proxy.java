@@ -259,7 +259,7 @@ public class Proxy extends Thread implements IProxy {
 				
 				o.writeObject(request);
 				MessageResponse serverResponse = (MessageResponse) i.readObject();
-				long newCredits = ProxyCli.updateCredits(username, request.getContent().length);
+				long newCredits = ProxyCli.updateCredits(username, 2 * request.getContent().length);
 				MessageResponse response = new MessageResponse(serverResponse.getMessage() + "\nYou now have " + newCredits + " credits.");
 	            
 	            socket.shutdownOutput();
@@ -281,6 +281,6 @@ public class Proxy extends Thread implements IProxy {
         ProxyCli.setUserOnline(username, false);
         sessions.remove(username);
         
-        return new MessageResponse("User successfully logged out.");
+        return new MessageResponse("Successfully logged out.");
 	}
 }
