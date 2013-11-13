@@ -47,7 +47,6 @@ import model.FileServerInfo;
 public class Proxy extends Thread implements IProxy {
 	
 	private static final Logger log = Logger.getLogger(Proxy.class);
-	private static Map<String, Proxy> sessions = Collections.synchronizedMap(new HashMap<String, Proxy>());
 	
 	private Socket socket;
 	private ObjectInputStream in;
@@ -108,10 +107,6 @@ public class Proxy extends Thread implements IProxy {
             log.error("IOException occurred during shutdown ...");
         }
     }
-    
-    public static Map<String, Proxy> getSessions() {
-    	return sessions;
-    }
 
 	@Command
 	@Override
@@ -120,7 +115,7 @@ public class Proxy extends Thread implements IProxy {
 		this.username = request.getUsername();
 	    this.password = request.getPassword();
 	    
-	    if (sessions.containsKey(username)) {
+	    if (ProxyCli.isUserOnline(username)) {
 	    	
 	        log.info("User already logged in.");
 	        interrupt();
@@ -128,7 +123,6 @@ public class Proxy extends Thread implements IProxy {
 	        
 	    } else if (password.equals(ProxyCli.getPassword(username))) {
 	    	
-	        sessions.put(username, this);
 	        ProxyCli.setUserOnline(username, true);
 	        return new LoginResponse(Type.SUCCESS);
 	        
@@ -279,8 +273,6 @@ public class Proxy extends Thread implements IProxy {
 	public MessageResponse logout() throws IOException {
 
         ProxyCli.setUserOnline(username, false);
-        sessions.remove(username);
-        
         return new MessageResponse("Successfully logged out.");
 	}
 }

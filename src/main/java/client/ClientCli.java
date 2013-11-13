@@ -3,6 +3,7 @@ package client;
 import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -177,9 +178,11 @@ public class ClientCli implements IClientCli {
 			out.writeObject(new DownloadTicketRequest(filename));
 			DownloadFileResponse response = (DownloadFileResponse) in.readObject();
 			
-			FileOutputStream fos = new FileOutputStream(downloadDir + "/" + response.getTicket().getFilename());
-			fos.write(response.getContent());
-			fos.close();
+			if(response != null) {
+				FileOutputStream fos = new FileOutputStream(downloadDir + "/" + response.getTicket().getFilename());
+				fos.write(response.getContent());
+				fos.close();
+			}
 			
 			return response;
 			
@@ -208,6 +211,8 @@ public class ClientCli implements IClientCli {
 			out.writeObject(new UploadRequest(filename, 1, fileBytes));
 			return (MessageResponse) in.readObject();
 			
+		} catch(FileNotFoundException e) {
+			log.error("File " + filename + " not found in client directory.");
 		} catch(ClassNotFoundException e) {
             log.error("ClassNotFoundException in ClientCli.list()");
 		}
@@ -238,6 +243,7 @@ public class ClientCli implements IClientCli {
 	@Command
 	@Override
 	public MessageResponse exit() throws IOException {
+    	log.info("Shutting down Client ...");
 		
         socket.shutdownOutput();
         socket.shutdownInput();

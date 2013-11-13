@@ -3,8 +3,7 @@
 *	startFileServer fs1
 
 client:	!login alice 12345
-client:	!credits
-proxy:	!users
+client:	!download notexistingfile.txt
 
 proxy:	!exit
 client:	!exit

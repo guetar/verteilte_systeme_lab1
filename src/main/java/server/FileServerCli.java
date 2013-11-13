@@ -6,13 +6,18 @@ import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.SocketException;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.log4j.Logger;
 
+import proxy.Proxy;
 import proxy.ProxyCli;
 import util.ComponentFactory;
 import util.Config;
@@ -24,7 +29,7 @@ import model.FileServerInfo;
 public class FileServerCli implements IFileServerCli {
 
 	private static final Logger log = Logger.getLogger(ProxyCli.class);
-    private static ExecutorService pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    private static ExecutorService pool;
     
 	private Thread shellThread;
 	private Config configFs;
@@ -33,8 +38,7 @@ public class FileServerCli implements IFileServerCli {
 	private ServerSocket tcpSocket;
 	private DatagramSocket udpSocket;
 	private Thread proxyThread;
-	private TimerTask udpTimerTask;
-	private Timer udpTimer;
+	private Thread aliveThread;
 	
 	private String fsDir;
 	private String fsHost;
@@ -55,7 +59,8 @@ public class FileServerCli implements IFileServerCli {
 		
 		this.configFs = config;
 		this.shell = shell;
-		log.info(configFs.getString("fileserver"));
+		
+        pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
 		shell.register(this);
 		shellThread = new Thread(shell);
@@ -82,7 +87,7 @@ public class FileServerCli implements IFileServerCli {
 			e.printStackTrace();
 		}
 		
-        udpTimerTask = new TimerTask() {
+        aliveThread = new Thread(new Runnable() {
         	@Override
             public void run() {
             	try {
@@ -94,16 +99,14 @@ public class FileServerCli implements IFileServerCli {
         	        
         	        udpSocket.send(packet);
         	        log.info("sent: " + new String(packet.getData()));
+        	        Thread.sleep(fsAlive);
         	        
-            	} catch(IOException e) {
+            	} catch(InterruptedException | IOException e) {
         			// TODO Auto-generated catch block
         			e.printStackTrace();
             	}
             }
-        };
-        
-        udpTimer = new Timer();
-        udpTimer.schedule(udpTimerTask, fsAlive);
+        });
         
 		proxyThread = new Thread(new Runnable() {
 			@Override
@@ -118,20 +121,45 @@ public class FileServerCli implements IFileServerCli {
 				}
 			}
 		});
-		proxyThread.start();
 		
-		log.info("Fileserver started ...");
+		proxyThread.start();
+		aliveThread.start();
+		
+		log.info("Fileserver " + configFs.getString("fileserver") + " started ...");
 	}
 
 	@Command
 	@Override
 	public MessageResponse exit() throws IOException {
+    	log.info("Shutting down Fileserver ...");
+    	
+        shellThread.interrupt();
+        shell.close();
+        System.in.close();
+        
 		proxyThread.interrupt();
-        udpTimer.purge();
+		aliveThread.interrupt();
 		pool.shutdown();
 
         udpSocket.close();
         tcpSocket.close();
+        
+        try {
+            // Wait a while for existing tasks to terminate.
+            if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.info("forcing termination with pool.shutdownNow()");
+                pool.shutdownNow();  // Cancel currently executing tasks
+                // Wait a while for tasks to respond to being cancelled.
+                if (!pool.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.info("pool did not terminate");
+                }
+            }
+        } catch (InterruptedException ex) {
+            // (Re-)Cancel if current thread also interrupted.
+            pool.shutdownNow();
+            // Preserve interrupt status.
+            Thread.currentThread().interrupt();
+        }
         
 		return new MessageResponse("exit");
 	}
