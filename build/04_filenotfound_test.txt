@@ -1,3 +1,4 @@
+%Checking output for a not existing file
 *	startProxy proxy
 *	startClient client
 *	startFileServer fs1

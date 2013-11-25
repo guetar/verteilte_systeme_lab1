@@ -187,17 +187,17 @@ public class ProxyCli implements IProxyCli {
 		return newCredits;
 	}
 	
-	public static synchronized void addServer(int udpPort, FileServerInfo info) {
-		servers.put(udpPort, info);
+	public static synchronized void addServer(int tcpPort, FileServerInfo info) {
+		servers.put(tcpPort, info);
 	}
 	
-	public static synchronized void removeServer(int udpPort) {
-		servers.remove(udpPort);
+	public static synchronized void removeServer(int tcpPort) {
+		servers.remove(tcpPort);
 	}
 	
-	public static synchronized void setServerOnline(int udpPort, boolean online) {
-		FileServerInfo fs = servers.remove(udpPort);
-		servers.put(udpPort, new FileServerInfo(fs.getAddress(), fs.getPort(), fs.getUsage(), online));
+	public static synchronized void setServerOnline(int tcpPort, boolean online) {
+		FileServerInfo fs = servers.remove(tcpPort);
+		servers.put(tcpPort, new FileServerInfo(fs.getAddress(), fs.getPort(), fs.getUsage(), online));
 	}
 	
 	public static synchronized List listServers() {
@@ -230,7 +230,10 @@ public class ProxyCli implements IProxyCli {
         clientThread.interrupt();
         serverThread.interrupt();
         pool.shutdown();
+        
         servers.clear();
+        users.clear();
+        pws.clear();
         
         udpSocket.close();
         tcpSocket.close();
